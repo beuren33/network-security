@@ -3,6 +3,8 @@ import pandas as pd
 import sys
 import numpy as np
 
+import Network_security
+
 #Data Ingestion
 
 TARGET_COLUMN='Result'
@@ -54,5 +56,7 @@ MODEL_TRAINER_TRAINED_MODEL_DIR:str = "trained_model"
 MODEL_TRAINER_TRAINED_MODEL_NAME:str= "model.pkl"
 MODEL_TRANER_EXPECTED_SCORE:float = 0.6
 MODEL_TRAINER_OVER_FIITING_UNDER_FITTING_THRESHOLD:float = 0.05
+
+BUCKET_NAME ="networksecurity223"
 
 

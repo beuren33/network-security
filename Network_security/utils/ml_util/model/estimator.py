@@ -7,7 +7,7 @@ from Network_security.logging.logger import logging
 class NetworkModel:
     def __init__(self,preprocessor,model):
         try:
-            self.prepocessor = preprocessor
+            self.preprocessor = preprocessor
             self.model = model
         except Exception as e:
             raise NetworkSecurityException(e, sys)

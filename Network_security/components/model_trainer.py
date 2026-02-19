@@ -1,5 +1,6 @@
 import sys
 import os
+from urllib.parse import urlparse
 from Network_security.exception.exception import NetworkSecurityException
 from Network_security.logging.logger import logging
 from Network_security.entity.config_entity import TrainerModelConfig
@@ -7,14 +8,19 @@ from Network_security.entity.artifact_entity import DataTransformationArtifact,M
 from Network_security.components.data_ingestion import DataIngestion
 from Network_security.utils.main_util import load_numpy_array,save_object,load_object,models_evaluate
 from Network_security.components.data_validation import DataValidation
+from Network_security.utils.ml_util.metric import classification_metric
 from Network_security.utils.ml_util.model.estimator import NetworkModel
-from Network_security.utils.ml_util.metric.classification_metric import get_classification_score
-
+import mlflow
+import dagshub
+from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import r2_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import (AdaBoostClassifier,GradientBoostingClassifier,RandomForestClassifier)
+from dotenv import load_dotenv
+
+load_dotenv('../../.env')
 
 
 class ModelTrainer:
@@ -24,6 +30,28 @@ class ModelTrainer:
             self.data_transformation_artifact = data_transformation_artifact
         except Exception as e:
             raise NetworkSecurityException(e, sys)
+        
+    def track_mlflow(self,best_model,classificationmetric,best_model_name):
+        os.environ["MLFLOW_TRACKING_USERNAME"] = "matheusbeuren"
+        os.environ["MLFLOW_TRACKING_PASSWORD"] = os.getenv("MLFLOW_TRACKING_PASSWORD")
+        mlflow.set_tracking_uri("https://dagshub.com/matheusbeuren/network-security.mlflow")
+        mlflow.set_experiment("network-security")
+
+        tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
+        
+        with mlflow.start_run():
+            f1_score=classificationmetric.f1_score
+            precision_score=classificationmetric.precision_score
+            recall_score=classificationmetric.recall_score
+
+            mlflow.log_metric("f1_score",f1_score)
+            mlflow.log_metric("precision",precision_score)
+            mlflow.log_metric("recall_score",recall_score)
+            if tracking_url_type_store != "file":
+                mlflow.sklearn.log_model(best_model, "model", registered_model_name=best_model_name)
+            else:
+                mlflow.sklearn.log_model(best_model, "model")
+                
     def train_model(self,x_train,y_train,x_test,y_test):
         try:
             models = {
@@ -67,16 +95,20 @@ class ModelTrainer:
             best_model = models[best_model_name]
             y_train_pred = best_model.predict(x_train)
 
-            class_train_metric = get_classification_score(y_true=y_train,y_pred=y_train_pred)
+            class_train_metric = classification_metric.get_classification_score(y_true=y_train,y_pred=y_train_pred)
 
             y_test_pred = best_model.predict(x_test)
 
-            class_test_metric = get_classification_score(y_true=y_test,y_pred=y_test_pred)
+            class_test_metric = classification_metric.get_classification_score(y_true=y_test,y_pred=y_test_pred)
+
+            self.track_mlflow(best_model,class_test_metric,best_model_name)
 
             preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
 
             model_dir_path = os.path.dirname(self.model_trainer_config.trained_model_file_path)
             os.makedirs(model_dir_path,exist_ok=True)
+
+            save_object("final_models/model.pkl",best_model)
 
             network_model =NetworkModel(preprocessor=preprocessor,model=best_model)
             save_object(self.model_trainer_config.trained_model_file_path,obj=network_model)
